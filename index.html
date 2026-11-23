@@ -1,0 +1,534 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Sonómetro</title>
+<meta name="description" content="Medidor de decibelios y grabadora de sonidos para el móvil: grabación automática por umbral con segundos previos y posteriores, filtro de zumbidos y reducción de ruido.">
+<meta name="theme-color" content="#f3f4f6" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0d1015" media="(prefers-color-scheme: dark)">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Sonómetro">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="stylesheet" href="css/style.css">
+<script type="module" src="js/app.js"></script>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">
+    <svg class="brand-logo" viewBox="0 0 64 64" aria-hidden="true">
+      <rect width="64" height="64" rx="14" fill="#0e1116"/>
+      <g fill="none" stroke-width="6" stroke-linecap="round">
+        <path d="M16.41 45 A18 18 0 0 1 16.41 27" stroke="#22c55e"/>
+        <path d="M16.41 27 A18 18 0 0 1 32 18" stroke="#eab308"/>
+        <path d="M32 18 A18 18 0 0 1 47.59 27" stroke="#f97316"/>
+        <path d="M47.59 27 A18 18 0 0 1 47.59 45" stroke="#ef4444"/>
+      </g>
+      <path d="M32 36 L37 23" stroke="#fff" stroke-width="4" stroke-linecap="round"/>
+      <circle cx="32" cy="36" r="4" fill="#fff"/>
+    </svg>
+    <span>Sonómetro</span>
+  </div>
+  <div id="status" class="pill" data-state="off" role="status" aria-live="polite">
+    <span class="dot"></span><span id="statusText">Detenido</span>
+  </div>
+</header>
+
+<main>
+
+<!-- ================= MEDIDOR ================= -->
+<section class="tab is-active" id="tab-meter" data-tab="meter" aria-label="Medidor">
+  <div id="banners"></div>
+
+  <div class="card gauge-card">
+    <div class="gauge">
+      <svg id="gauge" viewBox="0 0 300 232" aria-hidden="true">
+        <path class="arc-bg" d="M 46.08 210 A 120 120 0 1 1 253.92 210" pathLength="100"/>
+        <path id="arcVal" class="arc-val" d="M 46.08 210 A 120 120 0 1 1 253.92 210" pathLength="100" stroke-dasharray="0 100"/>
+        <g id="ticks"></g>
+        <line id="thrMark" class="thr-mark" x1="0" y1="0" x2="0" y2="0" visibility="hidden"/>
+        <circle id="maxMark" class="max-mark" r="5" cx="0" cy="0" visibility="hidden"/>
+      </svg>
+      <div class="readout">
+        <div class="readout-value" id="dbValue">--</div>
+        <div class="readout-unit unit-w">dB(A)</div>
+      </div>
+    </div>
+    <div class="readout-label" id="dbLabel">Pulsa «Escuchar» para empezar</div>
+    <div class="filter-chips" id="filterChips"></div>
+
+    <div class="stats">
+      <div class="stat"><span class="stat-k">Mín</span><span class="stat-v" id="stMin">--</span></div>
+      <div class="stat"><span class="stat-k">Media</span><span class="stat-v" id="stLeq">--</span></div>
+      <div class="stat"><span class="stat-k">Máx</span><span class="stat-v" id="stMax">--</span></div>
+      <div class="stat"><span class="stat-k">Pico</span><span class="stat-v" id="stPeak">--</span></div>
+    </div>
+    <div class="stats-foot">
+      <span>Tiempo <b id="stTime">0:00:00</b></span>
+      <button class="link" id="btnReset" type="button">Reiniciar</button>
+    </div>
+  </div>
+
+  <div class="actions">
+    <button id="btnListen" class="btn btn-primary btn-lg" type="button">
+      <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>
+      <span id="btnListenLabel">Escuchar</span>
+    </button>
+    <button id="btnRec" class="btn btn-rec btn-lg" type="button" disabled>
+      <span class="rec-dot" aria-hidden="true"></span>
+      <span id="btnRecLabel">Grabar</span>
+    </button>
+  </div>
+
+  <div class="card auto-card">
+    <div class="row">
+      <div>
+        <div class="card-title">Grabación automática</div>
+        <div class="hint" id="autoHint">Graba 2 s antes y 2 s después de cada sonido que supere el umbral.</div>
+      </div>
+      <label class="switch"><input type="checkbox" data-setting="autoRec" aria-label="Grabación automática"><span></span></label>
+    </div>
+    <div class="row threshold-row">
+      <span class="field-label">Umbral</span>
+      <div class="stepper">
+        <button type="button" data-step="-1" aria-label="Bajar umbral">−</button>
+        <span class="stepper-val"><output data-out="threshold">60</output> <span class="unit-w">dB(A)</span></span>
+        <button type="button" data-step="1" aria-label="Subir umbral">+</button>
+      </div>
+    </div>
+    <input type="range" min="20" max="110" step="1" data-setting="threshold" aria-label="Umbral de grabación">
+    <button class="link" id="lnkAutoSettings" type="button">Segundos antes/después y más opciones</button>
+  </div>
+
+  <div class="card">
+    <div class="card-head">
+      <div class="card-title">Historial</div>
+      <div class="chips" role="radiogroup" aria-label="Ventana del historial">
+        <label><input type="radio" name="historyWin" value="30" data-setting="historyWin"><span>30 s</span></label>
+        <label><input type="radio" name="historyWin" value="60" data-setting="historyWin"><span>1 min</span></label>
+        <label><input type="radio" name="historyWin" value="300" data-setting="historyWin"><span>5 min</span></label>
+      </div>
+    </div>
+    <canvas id="histCanvas" class="chart" aria-label="Gráfica del nivel de sonido en el tiempo"></canvas>
+    <div class="legend"><span class="lg lg-line"></span>Nivel <span class="lg lg-rec"></span>Grabando <span class="lg lg-thr"></span>Umbral</div>
+  </div>
+
+  <div class="card">
+    <div class="card-head">
+      <div class="card-title">Espectro</div>
+      <div class="hint" id="specPeak"></div>
+    </div>
+    <canvas id="specCanvas" class="chart chart-sm" aria-label="Espectro de frecuencias"></canvas>
+  </div>
+</section>
+
+<!-- ================= GRABACIONES ================= -->
+<section class="tab" id="tab-recs" data-tab="recs" aria-label="Grabaciones">
+  <div class="section-head">
+    <h2>Grabaciones</h2>
+    <div class="hint" id="recSummary"></div>
+  </div>
+  <div class="toolbar">
+    <button id="btnCsv" class="btn btn-sm" type="button">
+      <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg>
+      Exportar registro (CSV)
+    </button>
+    <button id="btnClearAll" class="btn btn-sm btn-danger-ghost" type="button">Borrar todo</button>
+  </div>
+  <button id="recNewBar" class="btn btn-sm new-bar" type="button" hidden></button>
+  <div id="recList" class="rec-list"></div>
+</section>
+
+<!-- ================= AJUSTES ================= -->
+<section class="tab" id="tab-settings" data-tab="settings" aria-label="Ajustes">
+  <div class="section-head"><h2>Ajustes</h2></div>
+
+  <div class="card" id="grp-measure">
+    <h3 class="card-title">Medición</h3>
+    <div class="field">
+      <div class="field-label">Ponderación</div>
+      <div class="seg" role="radiogroup" aria-label="Ponderación">
+        <label><input type="radio" name="weighting" value="A" data-setting="weighting"><span>dB(A)</span></label>
+        <label><input type="radio" name="weighting" value="Z" data-setting="weighting"><span>dB(Z) plana</span></label>
+      </div>
+      <div class="field-hint">dB(A) imita al oído humano y es la que se usa para ruido ambiental. dB(Z) cuenta todas las frecuencias por igual.</div>
+    </div>
+    <div class="field">
+      <div class="field-label">Respuesta</div>
+      <div class="seg" role="radiogroup" aria-label="Respuesta">
+        <label><input type="radio" name="tau" value="fast" data-setting="tau"><span>Rápida · 125 ms</span></label>
+        <label><input type="radio" name="tau" value="slow" data-setting="tau"><span>Lenta · 1 s</span></label>
+      </div>
+      <div class="field-hint">Rápida capta golpes y ruidos cortos. Lenta da una lectura más estable.</div>
+    </div>
+    <div class="field">
+      <div class="field-row">
+        <span class="field-label">Calibración</span>
+        <span class="num-wrap"><input type="number" step="0.5" min="40" max="160" data-setting="offset" class="num" inputmode="decimal" aria-label="Calibración en dB"> dB</span>
+      </div>
+      <input type="range" min="60" max="140" step="0.5" data-setting="offset" aria-label="Calibración">
+      <div class="field-hint">Se suma a la señal del micrófono para convertirla en dB. Señal actual: <b id="rawDbfs">--</b> dBFS.</div>
+      <div class="cal-box">
+        <label for="calRef" class="field-hint">¿Tienes un sonómetro de referencia? Escribe lo que marca ahora mismo:</label>
+        <div class="field-row">
+          <input id="calRef" type="number" step="0.1" placeholder="p. ej. 45,0" inputmode="decimal" class="num num-wide">
+          <button id="btnCalibrate" class="btn" type="button">Calibrar (3 s)</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card" id="grp-auto">
+    <h3 class="card-title">Grabación automática</h3>
+    <div class="field">
+      <div class="field-row"><span class="field-label">Umbral de disparo</span><span class="val"><output data-out="threshold"></output> <span class="unit-w">dB(A)</span></span></div>
+      <input type="range" min="20" max="110" step="1" data-setting="threshold" aria-label="Umbral de disparo">
+      <div class="field-hint">Empieza a grabar cuando el nivel supera este valor.</div>
+    </div>
+    <div class="field">
+      <div class="field-row"><span class="field-label">Segundos antes del sonido</span><span class="val"><output data-out="pre"></output> s</span></div>
+      <input type="range" min="0" max="5" step="0.5" data-setting="pre" aria-label="Segundos antes">
+      <div class="field-hint">La app guarda siempre en memoria los últimos segundos, así que la grabación incluye lo que pasó justo antes.</div>
+    </div>
+    <div class="field">
+      <div class="field-row"><span class="field-label">Segundos después del sonido</span><span class="val"><output data-out="post"></output> s</span></div>
+      <input type="range" min="0" max="5" step="0.5" data-setting="post" aria-label="Segundos después">
+      <div class="field-hint">Sigue grabando mientras haya sonido y para cuando lleva este tiempo por debajo del umbral.</div>
+    </div>
+    <div class="field field-row">
+      <label class="field-label" for="selMin">Ignorar sonidos más cortos de</label>
+      <select id="selMin" data-setting="minEvent">
+        <option value="0">No ignorar</option>
+        <option value="0.1">0,1 s</option>
+        <option value="0.25">0,25 s</option>
+        <option value="0.5">0,5 s</option>
+        <option value="1">1 s</option>
+        <option value="2">2 s</option>
+      </select>
+    </div>
+    <div class="field field-row">
+      <label class="field-label" for="selMax">Duración máxima de cada grabación</label>
+      <select id="selMax" data-setting="maxDur">
+        <option value="10">10 s</option>
+        <option value="30">30 s</option>
+        <option value="60">1 min</option>
+        <option value="120">2 min</option>
+        <option value="300">5 min</option>
+      </select>
+    </div>
+    <div class="field field-row">
+      <div>
+        <div class="field-label">Normalizar volumen</div>
+        <div class="field-hint">Sube el volumen de las grabaciones flojas para oírlas mejor. Los dB guardados no cambian.</div>
+      </div>
+      <label class="switch"><input type="checkbox" data-setting="normalize" aria-label="Normalizar volumen"><span></span></label>
+    </div>
+  </div>
+
+  <div class="card" id="grp-filters">
+    <h3 class="card-title">Filtros en tiempo real</h3>
+    <p class="card-sub">Se aplican a la lectura de dB y a las grabaciones. Para mediciones exactas, déjalos desactivados.</p>
+    <div class="field">
+      <div class="field-label">Quitar zumbido eléctrico</div>
+      <div class="seg" role="radiogroup" aria-label="Filtro de zumbido">
+        <label><input type="radio" name="hum" value="0" data-setting="hum"><span>No</span></label>
+        <label><input type="radio" name="hum" value="50" data-setting="hum"><span>50 Hz · Europa</span></label>
+        <label><input type="radio" name="hum" value="60" data-setting="hum"><span>60 Hz · América</span></label>
+      </div>
+      <div class="field-hint">Elimina el zumbido de la red eléctrica (transformadores, fluorescentes, cargadores, amplificadores) y sus armónicos.</div>
+    </div>
+    <div class="field field-row">
+      <label class="field-label" for="selHarm">Intensidad del filtro de zumbido</label>
+      <select id="selHarm" data-setting="humHarm">
+        <option value="4">Suave</option>
+        <option value="8">Normal</option>
+        <option value="16">Fuerte</option>
+      </select>
+    </div>
+    <div class="field field-row">
+      <div>
+        <label class="field-label" for="selHp">Quitar graves</label>
+        <div class="field-hint">Viento, retumbos, tráfico lejano, golpes en la mesa.</div>
+      </div>
+      <select id="selHp" data-setting="highpass">
+        <option value="0">No</option>
+        <option value="80">80 Hz</option>
+        <option value="150">150 Hz</option>
+        <option value="300">300 Hz</option>
+      </select>
+    </div>
+    <div class="field field-row">
+      <div>
+        <label class="field-label" for="selLp">Quitar agudos</label>
+        <div class="field-hint">Siseo y pitidos.</div>
+      </div>
+      <select id="selLp" data-setting="lowpass">
+        <option value="0">No</option>
+        <option value="8000">8 kHz</option>
+        <option value="4000">4 kHz</option>
+      </select>
+    </div>
+  </div>
+
+  <div class="card" id="grp-nr">
+    <h3 class="card-title">Reducción de ruido de fondo</h3>
+    <p class="card-sub">Limpia el ruido constante (ventilador, nevera, aire acondicionado, ruido de calle) de las grabaciones. También puedes aplicarlo después con «Quitar ruido» en cada grabación.</p>
+    <div class="field field-row">
+      <label class="field-label" for="selNr">Al guardar</label>
+      <select id="selNr" data-setting="nrMode">
+        <option value="off">Desactivada</option>
+        <option value="auto">Automática</option>
+        <option value="profile">Perfil aprendido</option>
+      </select>
+    </div>
+    <div class="field">
+      <div class="field-label">Fuerza</div>
+      <div class="seg" role="radiogroup" aria-label="Fuerza de la reducción de ruido">
+        <label><input type="radio" name="nrStrength" value="1" data-setting="nrStrength"><span>Suave</span></label>
+        <label><input type="radio" name="nrStrength" value="2" data-setting="nrStrength"><span>Media</span></label>
+        <label><input type="radio" name="nrStrength" value="3" data-setting="nrStrength"><span>Fuerte</span></label>
+      </div>
+      <div class="field-hint">Más fuerza quita más ruido, pero puede dejar un sonido «metálico».</div>
+    </div>
+    <div class="field">
+      <div class="field-label">Perfil de ruido</div>
+      <div class="field-hint" id="noiseStatus">No hay perfil guardado.</div>
+      <div class="btn-row">
+        <button id="btnLearn" class="btn" type="button">Aprender ruido de fondo (3 s)</button>
+        <button id="btnForget" class="btn btn-ghost" type="button" hidden>Borrar perfil</button>
+      </div>
+      <div class="field-hint">Púlsalo cuando solo se oiga el ruido de fondo habitual, sin hablar.</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3 class="card-title">Pantalla y datos</h3>
+    <div class="field field-row">
+      <div>
+        <div class="field-label">Mantener pantalla encendida</div>
+        <div class="field-hint" id="wakeHint">Evita que el móvil se bloquee mientras escucha.</div>
+      </div>
+      <label class="switch"><input type="checkbox" data-setting="wakeLock" aria-label="Mantener pantalla encendida"><span></span></label>
+    </div>
+    <div class="field field-row">
+      <div class="field-hint">Todo se guarda solo en este dispositivo.</div>
+      <button id="btnResetSettings" class="btn btn-ghost" type="button">Restablecer ajustes</button>
+    </div>
+  </div>
+</section>
+
+<!-- ================= AYUDA ================= -->
+<section class="tab" id="tab-help" data-tab="help" aria-label="Instrucciones">
+  <div class="section-head"><h2>Instrucciones</h2></div>
+
+  <details class="card help" open>
+    <summary>Empezar en 1 minuto</summary>
+    <div class="help-body">
+      <ol>
+        <li>Pulsa <b>Escuchar</b> y acepta el permiso del micrófono.</li>
+        <li>Coloca el móvil como se explica abajo y no lo toques.</li>
+        <li>Activa <b>Grabación automática</b>. Mira la lectura <b>Media</b> con el ruido de fondo normal y pon el umbral unos 6–10 dB por encima.</li>
+        <li>Deja la pantalla encendida y el móvil cargando. Cada sonido que supere el umbral se guarda en <b>Grabaciones</b> con los segundos de antes y de después (2 s por defecto).</li>
+      </ol>
+    </div>
+  </details>
+
+  <details class="card help">
+    <summary>Dónde está el micrófono</summary>
+    <div class="help-body">
+      <svg class="illus" viewBox="0 0 340 214" role="img" aria-label="Móvil con el micrófono principal en el borde inferior y el secundario arriba">
+        <rect x="130" y="10" width="100" height="192" rx="16" class="i-body"/>
+        <rect x="138" y="26" width="84" height="160" rx="6" class="i-screen"/>
+        <rect x="168" y="16" width="24" height="3" rx="1.5" class="i-muted"/>
+        <text x="180" y="96" class="i-big">62</text>
+        <text x="180" y="114" class="i-small">dB(A)</text>
+        <rect x="170" y="196" width="20" height="5" rx="2.5" class="i-muted"/>
+        <circle cx="152" cy="198" r="3.6" class="i-mic"/>
+        <circle cx="206" cy="14" r="2.8" class="i-mic2"/>
+        <path d="M148 200 L124 200 L112 186" class="i-call i-call-mic"/>
+        <text x="4" y="148" class="i-label">Micrófono</text>
+        <text x="4" y="164" class="i-label">principal</text>
+        <text x="4" y="181" class="i-sub">borde inferior,</text>
+        <text x="4" y="195" class="i-sub">junto al conector</text>
+        <path d="M209 12 L248 12 L258 22" class="i-call i-call-mic2"/>
+        <text x="240" y="42" class="i-label">Secundario</text>
+        <text x="240" y="58" class="i-sub">arriba o detrás,</text>
+        <text x="240" y="72" class="i-sub">junto a la cámara</text>
+      </svg>
+      <p>Casi todos los móviles tienen el <b>micrófono principal en el borde inferior</b>, junto al conector de carga. Suele haber otro arriba o en la parte trasera que se usa para cancelar ruido. El navegador normalmente usa el principal.</p>
+      <p><b>Truco:</b> con la app escuchando, sopla muy suave o rasca con la uña cerca de cada agujero. El que hace subir más el medidor es el que se está usando.</p>
+    </div>
+  </details>
+
+  <details class="card help">
+    <summary>Cómo colocar el móvil</summary>
+    <div class="help-body">
+      <svg class="illus" viewBox="0 0 320 120" role="img" aria-label="Móvil tumbado sobre una toalla con el micrófono apuntando a la fuente de sonido">
+        <rect x="20" y="40" width="30" height="40" rx="4" class="i-body"/>
+        <circle cx="35" cy="54" r="7" class="i-screen"/>
+        <circle cx="35" cy="71" r="4" class="i-screen"/>
+        <path d="M62 50 a24 24 0 0 1 0 28 M74 42 a36 36 0 0 1 0 44 M86 34 a48 48 0 0 1 0 60" class="i-wave"/>
+        <line x1="8" y1="98" x2="312" y2="98" class="i-table"/>
+        <rect x="126" y="86" width="140" height="12" rx="6" class="i-towel"/>
+        <rect x="140" y="77" width="104" height="9" rx="4.5" class="i-phone"/>
+        <circle cx="143" cy="81.5" r="2.6" class="i-mic"/>
+        <text x="35" y="26" class="i-sub i-mid">Sonido</text>
+        <text x="148" y="66" class="i-sub">micrófono hacia el sonido</text>
+        <text x="196" y="114" class="i-sub i-mid">sobre una toalla o paño</text>
+      </svg>
+      <ul>
+        <li><b>Apunta el borde del micrófono hacia el sonido</b> y deja el agujero libre: sin funda que lo tape, sin dedos ni tela encima.</li>
+        <li><b>Apóyalo sobre algo blando</b> (toalla, cojín, paño doblado). Así las vibraciones de la mesa o el suelo no se registran como ruido.</li>
+        <li><b>Sepáralo de paredes</b> y superficies duras (al menos 1 m si puedes) y, para medir el ruido de una habitación, ponlo a la altura de los oídos (1,2–1,5 m).</li>
+        <li><b>Para ruido de vecinos</b>, ponlo en la habitación donde más se oye, cerca de la pared o el techo de donde viene, pero sin tocarlos.</li>
+        <li><b>No hables, no te muevas cerca y no toques el móvil</b> mientras mide: el roce se oye muchísimo.</li>
+        <li><b>En exterior</b>, protégelo del viento (una esponja o un calcetín fino sobre el micrófono ayuda) y activa «Quitar graves» a 150 Hz.</li>
+        <li><b>Aléjalo de ruidos propios</b>: ventilador del ordenador, nevera o un cargador que zumbe.</li>
+      </ul>
+    </div>
+  </details>
+
+  <details class="card help">
+    <summary>Dejarlo escuchando durante horas</summary>
+    <div class="help-body">
+      <ul>
+        <li><b>Conéctalo al cargador.</b> Escuchar sin parar gasta batería.</li>
+        <li><b>Pantalla encendida:</b> deja activado «Mantener pantalla encendida» en Ajustes. Puedes bajar el brillo al mínimo.</li>
+        <li><b>No cambies de app ni bloquees el móvil.</b> Los navegadores cortan el micrófono cuando la página pasa a segundo plano. Si ocurre, al volver verás un aviso con el rato que no se escuchó.</li>
+        <li><b>Quita el ahorro de batería</b>, que puede pausar la página.</li>
+        <li><b>Activa «No molestar»</b> para que notificaciones y llamadas no suenen (se grabarían) ni corten el micrófono. Una vez abierta, la app funciona sin internet, así que también puedes usar el modo avión.</li>
+        <li>Revisa de vez en cuando la pestaña <b>Grabaciones</b>: el número rojo indica grabaciones nuevas.</li>
+      </ul>
+    </div>
+  </details>
+
+  <details class="card help">
+    <summary>Instalarla como app</summary>
+    <div class="help-body">
+      <p>Instalada se abre a pantalla completa y funciona sin conexión.</p>
+      <ul>
+        <li><b>Android (Chrome):</b> menú ⋮ → «Instalar aplicación» o «Añadir a pantalla de inicio».</li>
+        <li><b>iPhone (Safari):</b> botón Compartir → «Añadir a pantalla de inicio».</li>
+      </ul>
+      <button id="btnInstall" class="btn btn-primary" type="button" hidden>Instalar ahora</button>
+    </div>
+  </details>
+
+  <details class="card help">
+    <summary>Permiso del micrófono</summary>
+    <div class="help-body">
+      <ul>
+        <li>La primera vez que pulses <b>Escuchar</b>, el navegador pedirá permiso: pulsa «Permitir».</li>
+        <li><b>Si lo denegaste en Android:</b> toca el icono a la izquierda de la dirección web → Permisos → Micrófono → Permitir, y recarga la página.</li>
+        <li><b>En iPhone:</b> en Safari toca «aA» en la barra de direcciones → Ajustes del sitio web → Micrófono → Permitir.</li>
+        <li>Si otra app está usando el micrófono (una llamada, una grabadora), ciérrala.</li>
+      </ul>
+    </div>
+  </details>
+
+  <details class="card help">
+    <summary>Calibrar para que los dB sean fiables</summary>
+    <div class="help-body">
+      <p>Cada móvil tiene un micrófono distinto, así que los valores son aproximados hasta que lo calibras.</p>
+      <ol>
+        <li>Pon el móvil junto a un sonómetro de verdad (o el de otra app ya calibrada) con un ruido constante, como un ventilador.</li>
+        <li>En <b>Ajustes → Medición</b> escribe lo que marca el sonómetro de referencia y pulsa <b>Calibrar</b>.</li>
+        <li>La app mide 3 segundos y ajusta la calibración. También puedes moverla a mano.</li>
+      </ol>
+      <p>Sin referencia, una comprobación rápida: una habitación muy silenciosa de noche debería marcar unos 25–35 dB(A), y una conversación normal a 1 m, unos 55–65 dB(A).</p>
+    </div>
+  </details>
+
+  <details class="card help">
+    <summary>Umbral y segundos antes/después</summary>
+    <div class="help-body">
+      <ul>
+        <li>Mira la lectura <b>Media</b> durante un minuto con el ruido de fondo normal. Pon el <b>umbral</b> unos <b>6–10 dB por encima</b>. Más bajo graba más cosas (y más falsas alarmas); más alto, solo ruidos fuertes.</li>
+        <li>La app guarda siempre en memoria los últimos segundos. Al detectar un sonido incluye lo que pasó <b>antes</b> de superar el umbral (de 0 a 5 s).</li>
+        <li>La grabación sigue <b>mientras dura</b> el sonido y termina cuando lleva los segundos <b>después</b> elegidos por debajo del umbral.</li>
+        <li>«Ignorar sonidos más cortos de…» evita guardar chasquidos y golpecitos sueltos.</li>
+        <li>El botón <b>Grabar</b> graba a mano (hasta 5 minutos) y también incluye los segundos previos.</li>
+      </ul>
+    </div>
+  </details>
+
+  <details class="card help">
+    <summary>Quitar zumbidos y ruido de fondo</summary>
+    <div class="help-body">
+      <ul>
+        <li><b>Zumbido eléctrico</b> (transformadores, fluorescentes, cargadores, amplificadores): Ajustes → «Quitar zumbido eléctrico» → <b>50 Hz</b> en España y Europa, 60 Hz en América. Sube la intensidad si se sigue oyendo.</li>
+        <li><b>Retumbos, viento, tráfico lejano:</b> «Quitar graves» a 80–150 Hz.</li>
+        <li><b>Siseo agudo:</b> «Quitar agudos» a 8 kHz.</li>
+        <li><b>Ruido constante</b> (ventilador, nevera, aire acondicionado): activa «Reducción de ruido de fondo». Va mejor si antes pulsas «Aprender ruido de fondo» cuando solo se oye ese ruido.</li>
+        <li>En <b>Grabaciones</b>, «Quitar ruido» crea una copia limpia y conserva la original.</li>
+        <li>El <b>espectro</b> del Medidor muestra la frecuencia dominante: un pico fijo en 50, 100 o 150 Hz es zumbido eléctrico.</li>
+      </ul>
+    </div>
+  </details>
+
+  <details class="card help">
+    <summary>Niveles de referencia</summary>
+    <div class="help-body">
+      <table class="ref">
+        <tbody>
+          <tr><td><i class="sw" style="--c:var(--ok)"></i>20</td><td>Hojas moviéndose, estudio de grabación</td></tr>
+          <tr><td><i class="sw" style="--c:var(--ok)"></i>30</td><td>Susurro, dormitorio de noche</td></tr>
+          <tr><td><i class="sw" style="--c:var(--ok)"></i>40</td><td>Biblioteca, nevera</td></tr>
+          <tr><td><i class="sw" style="--c:var(--ok)"></i>50</td><td>Oficina tranquila, lluvia moderada</td></tr>
+          <tr><td><i class="sw" style="--c:var(--warn)"></i>60</td><td>Conversación normal</td></tr>
+          <tr><td><i class="sw" style="--c:var(--hot)"></i>70</td><td>Aspiradora, tráfico urbano</td></tr>
+          <tr><td><i class="sw" style="--c:var(--hot)"></i>80</td><td>Tráfico intenso, despertador</td></tr>
+          <tr><td><i class="sw" style="--c:var(--danger)"></i>85</td><td>A partir de aquí, la exposición prolongada daña el oído</td></tr>
+          <tr><td><i class="sw" style="--c:var(--danger)"></i>90</td><td>Cortacésped, moto</td></tr>
+          <tr><td><i class="sw" style="--c:var(--danger)"></i>100</td><td>Discoteca, martillo neumático</td></tr>
+          <tr><td><i class="sw" style="--c:var(--danger)"></i>110</td><td>Concierto de rock</td></tr>
+          <tr><td><i class="sw" style="--c:var(--danger)"></i>120</td><td>Sirena cercana, umbral de dolor</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </details>
+
+  <details class="card help">
+    <summary>Precisión y privacidad</summary>
+    <div class="help-body">
+      <ul>
+        <li>Un móvil no es un sonómetro homologado. Calibrado, la precisión típica es de ±2–5 dB. Por debajo de ~30 dB domina el ruido del propio micrófono y por encima de ~100–110 dB puede saturarse.</li>
+        <li>Sirve como registro orientativo (por ejemplo, para documentar molestias), pero una denuncia formal suele requerir una medición con un sonómetro certificado.</li>
+        <li>Como referencia, la OMS recomienda no superar 30 dB(A) de media en un dormitorio por la noche.</li>
+        <li>Las grabaciones se guardan <b>solo en este dispositivo</b>; no se suben a ningún servidor. Si borras los datos del navegador, se borran.</li>
+        <li>Grabar conversaciones de otras personas puede estar limitado por la ley. Úsala con respeto.</li>
+      </ul>
+    </div>
+  </details>
+</section>
+
+</main>
+
+<nav class="tabbar" aria-label="Secciones">
+  <button type="button" data-go="meter" aria-current="page">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4.6 17.5a8.5 8.5 0 1 1 14.8 0"/><path d="M12 14l4.2-4.2"/><circle cx="12" cy="14" r="1.3" class="fill"/></svg>
+    Medidor
+  </button>
+  <button type="button" data-go="recs">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12h1.5M7 8.5v7M10.5 5v14M14 9v6M17.5 6.5v11M21 12h-.5"/></svg>
+    Grabaciones
+    <span class="tab-badge" id="recBadge" hidden>0</span>
+  </button>
+  <button type="button" data-go="settings">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h9M17 6h3M4 12h3M11 12h9M4 18h11M19 18h1"/><circle cx="15" cy="6" r="2"/><circle cx="9" cy="12" r="2"/><circle cx="17" cy="18" r="2"/></svg>
+    Ajustes
+  </button>
+  <button type="button" data-go="help">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M9.6 9.4a2.5 2.5 0 1 1 3.6 2.3c-.7.4-1.2 1-1.2 1.8v.5"/><circle cx="12" cy="17.2" r=".9" class="fill"/></svg>
+    Ayuda
+  </button>
+</nav>
+
+<div id="toast" role="status" aria-live="polite"></div>
+</body>
+</html>
