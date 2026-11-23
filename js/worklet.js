@@ -52,7 +52,7 @@ class MeterProcessor extends AudioWorkletProcessor {
     this.sumZ = 0;
     this.sumA = 0;
     this.peak = 0;
-    this.size = Math.max(256, Math.round(sampleRate * 0.05));
+    this.size = Math.max(128, Math.round(sampleRate * 0.02)); // bloques de 20 ms: respuesta casi inmediata
     this.buf = new Float32Array(this.size);
     this.pos = 0;
     this.port.onmessage = (e) => {

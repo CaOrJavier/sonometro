@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Sonómetro</title>
-<meta name="description" content="Medidor de decibelios y grabadora de sonidos para el móvil: grabación automática por umbral con segundos previos y posteriores, filtro de zumbidos y reducción de ruido.">
+<meta name="description" content="Medidor de decibelios y grabadora de sonidos para el móvil: comprueba si el ruido de los vecinos supera el límite legal, resta el ruido de fondo y graba automáticamente con segundos previos y posteriores.">
 <meta name="theme-color" content="#f3f4f6" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#0d1015" media="(prefers-color-scheme: dark)">
 <meta name="mobile-web-app-capable" content="yes">
@@ -45,32 +45,53 @@
 <section class="tab is-active" id="tab-meter" data-tab="meter" aria-label="Medidor">
   <div id="banners"></div>
 
-  <div class="card gauge-card">
-    <div class="gauge">
-      <svg id="gauge" viewBox="0 0 300 232" aria-hidden="true">
-        <path class="arc-bg" d="M 46.08 210 A 120 120 0 1 1 253.92 210" pathLength="100"/>
-        <path id="arcVal" class="arc-val" d="M 46.08 210 A 120 120 0 1 1 253.92 210" pathLength="100" stroke-dasharray="0 100"/>
-        <g id="ticks"></g>
-        <line id="thrMark" class="thr-mark" x1="0" y1="0" x2="0" y2="0" visibility="hidden"/>
-        <circle id="maxMark" class="max-mark" r="5" cx="0" cy="0" visibility="hidden"/>
-      </svg>
+  <div class="card hero">
+    <div class="hero-top">
       <div class="readout">
-        <div class="readout-value" id="dbValue">--</div>
-        <div class="readout-unit unit-w">dB(A)</div>
+        <span class="readout-value" id="dbValue">--</span>
+        <span class="readout-unit unit-w">dB(A)</span>
+      </div>
+      <div class="hero-side">
+        <div class="readout-label" id="dbLabel">Pulsa «Escuchar» para empezar</div>
+        <div class="filter-chips" id="filterChips"></div>
       </div>
     </div>
-    <div class="readout-label" id="dbLabel">Pulsa «Escuchar» para empezar</div>
-    <div class="filter-chips" id="filterChips"></div>
+
+    <div class="mbar" aria-hidden="true">
+      <div class="mbar-track">
+        <div class="mbar-fill"><div class="mbar-cover" id="mbCover"></div></div>
+        <i class="mbar-mark mbar-lim" id="mbLim" title="Límite legal"></i>
+        <i class="mbar-mark mbar-thr" id="mbThr" hidden></i>
+        <i class="mbar-max" id="mbMax" hidden></i>
+      </div>
+      <div class="mbar-scale">
+        <span style="left:0%">20</span><span style="left:20%">40</span><span style="left:40%">60</span>
+        <span style="left:60%">80</span><span style="left:80%">100</span><span style="left:100%">120</span>
+      </div>
+    </div>
 
     <div class="stats">
       <div class="stat"><span class="stat-k">Mín</span><span class="stat-v" id="stMin">--</span></div>
       <div class="stat"><span class="stat-k">Media</span><span class="stat-v" id="stLeq">--</span></div>
       <div class="stat"><span class="stat-k">Máx</span><span class="stat-v" id="stMax">--</span></div>
-      <div class="stat"><span class="stat-k">Pico</span><span class="stat-v" id="stPeak">--</span></div>
+      <div class="stat"><span class="stat-k">Tiempo</span><span class="stat-v" id="stTime">0:00:00</span></div>
     </div>
-    <div class="stats-foot">
-      <span>Tiempo <b id="stTime">0:00:00</b></span>
-      <button class="link" id="btnReset" type="button">Reiniciar</button>
+
+    <div class="legal" id="legal" data-state="idle">
+      <div class="legal-head">
+        Límite legal de <span id="lgPeriod">noche</span> en
+        <select id="selRoom" class="inline-select" data-setting="room" aria-label="Habitación donde mides">
+          <option value="bedroom">dormitorio</option>
+          <option value="living">salón</option>
+          <option value="custom">personalizado</option>
+        </select>
+        <button class="info-btn" id="lnkLegalHelp" type="button" aria-label="Qué significa el límite legal">?</button>
+      </div>
+      <div class="legal-row">
+        <span class="legal-vals"><b class="legal-now" id="lgNow">--</b> <span class="legal-of">/ <span id="lgLimit">25</span> dB(A) · media 5 s</span></span>
+        <span class="legal-pill" id="lgStatus">—</span>
+      </div>
+      <div class="legal-sum" id="lgSummary" hidden></div>
     </div>
   </div>
 
@@ -85,23 +106,53 @@
     </button>
   </div>
 
-  <div class="card auto-card">
-    <div class="row">
-      <div>
-        <div class="card-title">Grabación automática</div>
-        <div class="hint" id="autoHint">Graba 2 s antes y 2 s después de cada sonido que supere el umbral.</div>
+  <div class="card wave-card">
+    <div class="card-head">
+      <div class="card-title">Onda</div>
+      <div class="chips" role="radiogroup" aria-label="Tipo de onda">
+        <label><input type="radio" name="waveMode" value="scroll" data-setting="waveMode"><span>Últimos 10 s</span></label>
+        <label><input type="radio" name="waveMode" value="scope" data-setting="waveMode"><span>Osciloscopio</span></label>
+      </div>
+    </div>
+    <canvas id="waveCanvas" class="chart chart-wave" aria-label="Onda del sonido en tiempo real"></canvas>
+  </div>
+
+  <div class="card toggles">
+    <div class="tg-row">
+      <div class="tg-text">
+        <div class="tg-title">Grabación automática</div>
+        <div class="tg-sub"><span id="autoSub"></span> · <button class="link" id="lnkThr" type="button">Cambiar</button></div>
       </div>
       <label class="switch"><input type="checkbox" data-setting="autoRec" aria-label="Grabación automática"><span></span></label>
     </div>
-    <div class="row threshold-row">
-      <span class="field-label">Umbral</span>
-      <div class="stepper">
-        <button type="button" data-step="-1" aria-label="Bajar umbral">−</button>
-        <span class="stepper-val"><output data-out="threshold">60</output> <span class="unit-w">dB(A)</span></span>
-        <button type="button" data-step="1" aria-label="Subir umbral">+</button>
+    <div class="tg-row">
+      <div class="tg-text">
+        <div class="tg-title">Restar ruido de fondo</div>
+        <div class="tg-sub"><span id="bgSub"></span> · <button class="link" id="btnBg" type="button">Medir fondo</button></div>
       </div>
+      <label class="switch"><input type="checkbox" data-setting="bgSubtract" aria-label="Restar ruido de fondo"><span></span></label>
     </div>
-    <input type="range" min="20" max="110" step="1" data-setting="threshold" aria-label="Umbral de grabación">
+  </div>
+
+  <div class="card" id="thrCard">
+    <div class="card-title">¿Cuándo grabar?</div>
+    <div class="seg thr-seg" role="radiogroup" aria-label="Cuándo grabar">
+      <label><input type="radio" name="thrMode" value="limit" data-setting="thrMode"><span>Al superar el límite legal</span></label>
+      <label><input type="radio" name="thrMode" value="manual" data-setting="thrMode"><span>Con mi umbral</span></label>
+    </div>
+    <p id="thrLimit" class="hint thr-text" hidden>Graba cada vez que el ruido supera el límite del momento: <b id="thrLimitTxt"></b>. Cambia solo a las 7:00, 19:00 y 23:00.</p>
+    <div id="thrManual">
+      <div class="row threshold-row">
+        <span class="field-label">Umbral</span>
+        <div class="stepper">
+          <button type="button" data-step="-1" aria-label="Bajar umbral">−</button>
+          <span class="stepper-val"><output data-out="threshold">60</output> <span class="unit-w">dB(A)</span></span>
+          <button type="button" data-step="1" aria-label="Subir umbral">+</button>
+        </div>
+      </div>
+      <input type="range" min="20" max="110" step="1" data-setting="threshold" aria-label="Umbral de grabación">
+    </div>
+    <p class="hint" id="autoHint"></p>
     <button class="link" id="lnkAutoSettings" type="button">Segundos antes/después y más opciones</button>
   </div>
 
@@ -115,7 +166,10 @@
       </div>
     </div>
     <canvas id="histCanvas" class="chart" aria-label="Gráfica del nivel de sonido en el tiempo"></canvas>
-    <div class="legend"><span class="lg lg-line"></span>Nivel <span class="lg lg-rec"></span>Grabando <span class="lg lg-thr"></span>Umbral</div>
+    <div class="legend">
+      <span class="lg lg-line"></span>Nivel <span class="lg lg-rec"></span>Grabando <span class="lg lg-lim"></span>Límite legal <span class="lg lg-thr"></span>Umbral
+      <button class="link legend-reset" id="btnReset" type="button">Reiniciar estadísticas</button>
+    </div>
   </div>
 
   <div class="card">
@@ -156,15 +210,16 @@
         <label><input type="radio" name="weighting" value="A" data-setting="weighting"><span>dB(A)</span></label>
         <label><input type="radio" name="weighting" value="Z" data-setting="weighting"><span>dB(Z) plana</span></label>
       </div>
-      <div class="field-hint">dB(A) imita al oído humano y es la que se usa para ruido ambiental. dB(Z) cuenta todas las frecuencias por igual.</div>
+      <div class="field-hint">dB(A) imita al oído humano y es la que usa la ley para el ruido. dB(Z) cuenta todas las frecuencias por igual.</div>
     </div>
     <div class="field">
       <div class="field-label">Respuesta</div>
       <div class="seg" role="radiogroup" aria-label="Respuesta">
-        <label><input type="radio" name="tau" value="fast" data-setting="tau"><span>Rápida · 125 ms</span></label>
-        <label><input type="radio" name="tau" value="slow" data-setting="tau"><span>Lenta · 1 s</span></label>
+        <label><input type="radio" name="tau" value="inst" data-setting="tau"><span>Instantánea<small>35 ms</small></span></label>
+        <label><input type="radio" name="tau" value="fast" data-setting="tau"><span>Rápida<small>125 ms</small></span></label>
+        <label><input type="radio" name="tau" value="slow" data-setting="tau"><span>Lenta<small>1 s</small></span></label>
       </div>
-      <div class="field-hint">Rápida capta golpes y ruidos cortos. Lenta da una lectura más estable.</div>
+      <div class="field-hint">Instantánea sigue cada golpe al momento. Rápida es la estándar de los sonómetros. Lenta da una lectura más estable.</div>
     </div>
     <div class="field">
       <div class="field-row">
@@ -183,12 +238,34 @@
     </div>
   </div>
 
+  <div class="card" id="grp-limits">
+    <h3 class="card-title">Límites legales</h3>
+    <p class="card-sub">Valores orientativos del Real Decreto 1367/2007 (tabla B2) para el ruido que llega a una vivienda. Tu ayuntamiento puede fijar otros valores u horarios.</p>
+    <div class="field field-row">
+      <label class="field-label" for="selRoom2">Habitación donde mides</label>
+      <select id="selRoom2" data-setting="room">
+        <option value="bedroom">Dormitorio</option>
+        <option value="living">Salón u otra estancia</option>
+        <option value="custom">Personalizado</option>
+      </select>
+    </div>
+    <div class="field">
+      <div class="field-label">Límites personalizados, en dB(A)</div>
+      <div class="lim-grid">
+        <label>Día · 7–19 h<input type="number" class="num" data-setting="limDay" min="10" max="100" step="1" inputmode="numeric"></label>
+        <label>Tarde · 19–23 h<input type="number" class="num" data-setting="limEve" min="10" max="100" step="1" inputmode="numeric"></label>
+        <label>Noche · 23–7 h<input type="number" class="num" data-setting="limNight" min="10" max="100" step="1" inputmode="numeric"></label>
+      </div>
+      <div class="field-hint">Se usan al elegir «Personalizado». Dormitorio: 35 / 35 / 25. Salón u otra estancia: 40 / 40 / 30.</div>
+    </div>
+  </div>
+
   <div class="card" id="grp-auto">
     <h3 class="card-title">Grabación automática</h3>
     <div class="field">
-      <div class="field-row"><span class="field-label">Umbral de disparo</span><span class="val"><output data-out="threshold"></output> <span class="unit-w">dB(A)</span></span></div>
-      <input type="range" min="20" max="110" step="1" data-setting="threshold" aria-label="Umbral de disparo">
-      <div class="field-hint">Empieza a grabar cuando el nivel supera este valor.</div>
+      <div class="field-row"><span class="field-label">Umbral manual</span><span class="val"><output data-out="threshold"></output> <span class="unit-w">dB(A)</span></span></div>
+      <input type="range" min="20" max="110" step="1" data-setting="threshold" aria-label="Umbral manual">
+      <div class="field-hint">Solo se usa si en el Medidor eliges «Con mi umbral». Con «Al superar el límite legal», el umbral es el límite del momento.</div>
     </div>
     <div class="field">
       <div class="field-row"><span class="field-label">Segundos antes del sonido</span><span class="val"><output data-out="pre"></output> s</span></div>
@@ -232,13 +309,13 @@
 
   <div class="card" id="grp-filters">
     <h3 class="card-title">Filtros en tiempo real</h3>
-    <p class="card-sub">Se aplican a la lectura de dB y a las grabaciones. Para mediciones exactas, déjalos desactivados.</p>
+    <p class="card-sub">Se aplican a la lectura de dB y a las grabaciones. Para comparar con el límite legal, déjalos desactivados y usa «Restar ruido de fondo».</p>
     <div class="field">
       <div class="field-label">Quitar zumbido eléctrico</div>
       <div class="seg" role="radiogroup" aria-label="Filtro de zumbido">
         <label><input type="radio" name="hum" value="0" data-setting="hum"><span>No</span></label>
-        <label><input type="radio" name="hum" value="50" data-setting="hum"><span>50 Hz · Europa</span></label>
-        <label><input type="radio" name="hum" value="60" data-setting="hum"><span>60 Hz · América</span></label>
+        <label><input type="radio" name="hum" value="50" data-setting="hum"><span>50 Hz<small>Europa</small></span></label>
+        <label><input type="radio" name="hum" value="60" data-setting="hum"><span>60 Hz<small>América</small></span></label>
       </div>
       <div class="field-hint">Elimina el zumbido de la red eléctrica (transformadores, fluorescentes, cargadores, amplificadores) y sus armónicos.</div>
     </div>
@@ -276,8 +353,8 @@
   </div>
 
   <div class="card" id="grp-nr">
-    <h3 class="card-title">Reducción de ruido de fondo</h3>
-    <p class="card-sub">Limpia el ruido constante (ventilador, nevera, aire acondicionado, ruido de calle) de las grabaciones. También puedes aplicarlo después con «Quitar ruido» en cada grabación.</p>
+    <h3 class="card-title">Limpiar ruido de las grabaciones</h3>
+    <p class="card-sub">Quita el ruido constante (ventilador, nevera, aire acondicionado, calle) del audio guardado para que se oiga mejor lo importante. No cambia los dB medidos. También puedes aplicarlo después con «Quitar ruido» en cada grabación.</p>
     <div class="field field-row">
       <label class="field-label" for="selNr">Al guardar</label>
       <select id="selNr" data-setting="nrMode">
@@ -331,10 +408,57 @@
     <div class="help-body">
       <ol>
         <li>Pulsa <b>Escuchar</b> y acepta el permiso del micrófono.</li>
-        <li>Coloca el móvil como se explica abajo y no lo toques.</li>
-        <li>Activa <b>Grabación automática</b>. Mira la lectura <b>Media</b> con el ruido de fondo normal y pon el umbral unos 6–10 dB por encima.</li>
-        <li>Deja la pantalla encendida y el móvil cargando. Cada sonido que supere el umbral se guarda en <b>Grabaciones</b> con los segundos de antes y de después (2 s por defecto).</li>
+        <li>Coloca el móvil en la habitación donde molesta el ruido, como se explica abajo, y no lo toques.</li>
+        <li>Cuando los vecinos estén en silencio, pulsa <b>Medir fondo</b>. A partir de ahí la app solo cuenta lo que suena por encima de ese fondo.</li>
+        <li>Elige la habitación (dormitorio o salón) en el recuadro del límite legal. La app sabe si es día, tarde o noche y te dice si se supera.</li>
+        <li>Activa <b>Grabación automática</b> con «Al superar el límite legal». Cada vez que se supere, se guarda el sonido con 2 s antes y 2 s después.</li>
+        <li>Deja la pantalla encendida y el móvil cargando. Al día siguiente revisa <b>Grabaciones</b> y exporta el registro.</li>
       </ol>
+    </div>
+  </details>
+
+  <details class="card help" id="help-vecinos">
+    <summary>Ruido de vecinos: ¿supera lo legal?</summary>
+    <div class="help-body">
+      <p><b>Límites orientativos</b> del Real Decreto 1367/2007 (tabla B2) para el ruido que llega a una vivienda:</p>
+      <table class="ref lim-table">
+        <thead><tr><td></td><td>Día<br><small>7–19 h</small></td><td>Tarde<br><small>19–23 h</small></td><td>Noche<br><small>23–7 h</small></td></tr></thead>
+        <tbody>
+          <tr><td>Dormitorio</td><td>35</td><td>35</td><td>25</td></tr>
+          <tr><td>Salón y demás estancias</td><td>40</td><td>40</td><td>30</td></tr>
+        </tbody>
+      </table>
+      <ul>
+        <li>Son valores en dB(A) medidos <b>dentro</b> de tu casa. La norma permite que una medida puntual de 5 segundos los supere hasta en 5 dB, y que la media de un día lo haga hasta en 3 dB. Por eso la app te avisa en ámbar si se supera el límite y en rojo si lo supera en más de 5 dB.</li>
+        <li>Si el ruido tiene tonos, golpes o graves marcados (música con bajos, impactos), la norma suma una penalización de varios dB. La app no la aplica, así que en esos casos el valor real sería aún más alto.</li>
+        <li>Estos límites se pensaron para actividades (bares, talleres, instalaciones). El ruido doméstico entre vecinos lo regula sobre todo tu <b>ordenanza municipal</b>, que suele usar valores y horarios parecidos. Consúltala en la web de tu ayuntamiento y, si hace falta, cambia los valores en Ajustes → Límites legales.</li>
+      </ul>
+      <p><b>Cómo medir</b> para que sirva de algo:</p>
+      <ul>
+        <li>En la habitación afectada, con puertas y ventanas cerradas y sin tele, radio ni ventilador.</li>
+        <li>Móvil a 1,2–1,5 m de altura (una estantería o una pila de libros) y a más de 1 m de las paredes, apoyado sobre algo blando.</li>
+        <li>Mide el fondo en un momento de silencio y activa «Restar ruido de fondo».</li>
+        <li>Si es posible, calibra el móvil (mira «Calibrar»). Sin calibrar, los dB pueden desviarse 5–10 dB o más.</li>
+      </ul>
+      <p><b>Lo que la app puede y no puede hacer:</b></p>
+      <ul>
+        <li>Muchos móviles no distinguen sonidos por debajo de unos 30 dB(A), porque su propio micrófono genera ese ruido. De noche, en un dormitorio (límite 25), la app solo puede confirmar superaciones claras.</li>
+        <li>Una medición con el móvil <b>no sirve como prueba oficial</b>: hace falta un sonómetro homologado y verificado. Sí sirve para llevar un <b>registro</b> (fechas, horas, niveles y grabaciones) con el que pedir una medición a tu ayuntamiento o a la policía local, o hablar con la comunidad de vecinos.</li>
+        <li>Exporta el registro desde <b>Grabaciones → Exportar registro (CSV)</b>. Se abre con Excel o con Hojas de cálculo de Google.</li>
+      </ul>
+    </div>
+  </details>
+
+  <details class="card help">
+    <summary>¿Por qué marca 25–35 dB aunque haya silencio?</summary>
+    <div class="help-body">
+      <p>Ningún medidor marca 0. En silencio siempre capta algo:</p>
+      <ul>
+        <li>el <b>ruido propio del micrófono</b> y de la electrónica del móvil, que en muchos móviles ronda los 25–35 dB(A);</li>
+        <li>ruidos de fondo que casi no notas: nevera, calefacción, tráfico lejano, el zumbido de algún aparato.</li>
+      </ul>
+      <p>Para no contarlo, pulsa <b>Medir fondo</b> en un momento de silencio y activa <b>Restar ruido de fondo</b>. La app hace la resta que hacen los técnicos (se restan las energías, no los números). Si un sonido no supera el fondo en al menos 3 dB, no se puede distinguir de él y la app muestra «--».</p>
+      <p>Si oyes un zumbido eléctrico, puedes quitarlo en Ajustes → «Quitar zumbido eléctrico» (50 Hz en España). Para que las grabaciones se oigan más limpias, usa Ajustes → «Limpiar ruido de las grabaciones».</p>
     </div>
   </details>
 
@@ -384,8 +508,8 @@
       <ul>
         <li><b>Apunta el borde del micrófono hacia el sonido</b> y deja el agujero libre: sin funda que lo tape, sin dedos ni tela encima.</li>
         <li><b>Apóyalo sobre algo blando</b> (toalla, cojín, paño doblado). Así las vibraciones de la mesa o el suelo no se registran como ruido.</li>
-        <li><b>Sepáralo de paredes</b> y superficies duras (al menos 1 m si puedes) y, para medir el ruido de una habitación, ponlo a la altura de los oídos (1,2–1,5 m).</li>
-        <li><b>Para ruido de vecinos</b>, ponlo en la habitación donde más se oye, cerca de la pared o el techo de donde viene, pero sin tocarlos.</li>
+        <li><b>Sepáralo de paredes</b> y superficies duras (al menos 1 m si puedes) y ponlo a la altura de los oídos (1,2–1,5 m).</li>
+        <li><b>Para ruido de vecinos</b>, ponlo en la habitación donde más se oye, con puertas y ventanas cerradas.</li>
         <li><b>No hables, no te muevas cerca y no toques el móvil</b> mientras mide: el roce se oye muchísimo.</li>
         <li><b>En exterior</b>, protégelo del viento (una esponja o un calcetín fino sobre el micrófono ayuda) y activa «Quitar graves» a 150 Hz.</li>
         <li><b>Aléjalo de ruidos propios</b>: ventilador del ordenador, nevera o un cargador que zumbe.</li>
@@ -394,7 +518,7 @@
   </details>
 
   <details class="card help">
-    <summary>Dejarlo escuchando durante horas</summary>
+    <summary>Dejarlo escuchando toda la noche</summary>
     <div class="help-body">
       <ul>
         <li><b>Conéctalo al cargador.</b> Escuchar sin parar gasta batería.</li>
@@ -402,8 +526,21 @@
         <li><b>No cambies de app ni bloquees el móvil.</b> Los navegadores cortan el micrófono cuando la página pasa a segundo plano. Si ocurre, al volver verás un aviso con el rato que no se escuchó.</li>
         <li><b>Quita el ahorro de batería</b>, que puede pausar la página.</li>
         <li><b>Activa «No molestar»</b> para que notificaciones y llamadas no suenen (se grabarían) ni corten el micrófono. Una vez abierta, la app funciona sin internet, así que también puedes usar el modo avión.</li>
-        <li>Revisa de vez en cuando la pestaña <b>Grabaciones</b>: el número rojo indica grabaciones nuevas.</li>
+        <li>Por la mañana revisa <b>Grabaciones</b>: el número rojo indica grabaciones nuevas, y las que superan el límite llevan una etiqueta roja.</li>
       </ul>
+    </div>
+  </details>
+
+  <details class="card help">
+    <summary>Calibrar para que los dB sean fiables</summary>
+    <div class="help-body">
+      <p>Cada móvil tiene un micrófono distinto, así que los valores son aproximados hasta que lo calibras. Para comparar con un límite legal es importante.</p>
+      <ol>
+        <li>Pon el móvil junto a un sonómetro de verdad con un ruido constante, como un ventilador. Si alguien tiene un iPhone, la app gratuita <b>NIOSH SLM</b> viene calibrada de fábrica y sirve de referencia aproximada.</li>
+        <li>En <b>Ajustes → Medición</b> escribe lo que marca el sonómetro de referencia y pulsa <b>Calibrar</b>.</li>
+        <li>La app mide 3 segundos y ajusta la calibración. También puedes moverla a mano.</li>
+      </ol>
+      <p>Después de calibrar, vuelve a pulsar <b>Medir fondo</b>.</p>
     </div>
   </details>
 
@@ -432,41 +569,14 @@
   </details>
 
   <details class="card help">
-    <summary>Calibrar para que los dB sean fiables</summary>
-    <div class="help-body">
-      <p>Cada móvil tiene un micrófono distinto, así que los valores son aproximados hasta que lo calibras.</p>
-      <ol>
-        <li>Pon el móvil junto a un sonómetro de verdad (o el de otra app ya calibrada) con un ruido constante, como un ventilador.</li>
-        <li>En <b>Ajustes → Medición</b> escribe lo que marca el sonómetro de referencia y pulsa <b>Calibrar</b>.</li>
-        <li>La app mide 3 segundos y ajusta la calibración. También puedes moverla a mano.</li>
-      </ol>
-      <p>Sin referencia, una comprobación rápida: una habitación muy silenciosa de noche debería marcar unos 25–35 dB(A), y una conversación normal a 1 m, unos 55–65 dB(A).</p>
-    </div>
-  </details>
-
-  <details class="card help">
-    <summary>Umbral y segundos antes/después</summary>
+    <summary>Grabación automática y segundos antes/después</summary>
     <div class="help-body">
       <ul>
-        <li>Mira la lectura <b>Media</b> durante un minuto con el ruido de fondo normal. Pon el <b>umbral</b> unos <b>6–10 dB por encima</b>. Más bajo graba más cosas (y más falsas alarmas); más alto, solo ruidos fuertes.</li>
-        <li>La app guarda siempre en memoria los últimos segundos. Al detectar un sonido incluye lo que pasó <b>antes</b> de superar el umbral (de 0 a 5 s).</li>
-        <li>La grabación sigue <b>mientras dura</b> el sonido y termina cuando lleva los segundos <b>después</b> elegidos por debajo del umbral.</li>
-        <li>«Ignorar sonidos más cortos de…» evita guardar chasquidos y golpecitos sueltos.</li>
-        <li>El botón <b>Grabar</b> graba a mano (hasta 5 minutos) y también incluye los segundos previos.</li>
-      </ul>
-    </div>
-  </details>
-
-  <details class="card help">
-    <summary>Quitar zumbidos y ruido de fondo</summary>
-    <div class="help-body">
-      <ul>
-        <li><b>Zumbido eléctrico</b> (transformadores, fluorescentes, cargadores, amplificadores): Ajustes → «Quitar zumbido eléctrico» → <b>50 Hz</b> en España y Europa, 60 Hz en América. Sube la intensidad si se sigue oyendo.</li>
-        <li><b>Retumbos, viento, tráfico lejano:</b> «Quitar graves» a 80–150 Hz.</li>
-        <li><b>Siseo agudo:</b> «Quitar agudos» a 8 kHz.</li>
-        <li><b>Ruido constante</b> (ventilador, nevera, aire acondicionado): activa «Reducción de ruido de fondo». Va mejor si antes pulsas «Aprender ruido de fondo» cuando solo se oye ese ruido.</li>
-        <li>En <b>Grabaciones</b>, «Quitar ruido» crea una copia limpia y conserva la original.</li>
-        <li>El <b>espectro</b> del Medidor muestra la frecuencia dominante: un pico fijo en 50, 100 o 150 Hz es zumbido eléctrico.</li>
+        <li>Con <b>«Al superar el límite legal»</b>, la app graba cada vez que el ruido supera el límite del momento (cambia solo a las 7:00, 19:00 y 23:00).</li>
+        <li>Con <b>«Con mi umbral»</b> eliges tú el nivel. Pon unos 6–10 dB por encima de la «Media» que marca en silencio.</li>
+        <li>La app guarda siempre en memoria los últimos segundos. Al detectar un sonido incluye lo que pasó <b>antes</b> (de 0 a 5 s), sigue <b>mientras dura</b> y termina cuando lleva los segundos <b>después</b> elegidos por debajo del umbral.</li>
+        <li>«Ignorar sonidos más cortos de…» evita guardar chasquidos sueltos.</li>
+        <li>El botón <b>Grabar</b> graba a mano (hasta 5 minutos) e incluye también los segundos previos.</li>
       </ul>
     </div>
   </details>
@@ -486,7 +596,6 @@
           <tr><td><i class="sw" style="--c:var(--danger)"></i>85</td><td>A partir de aquí, la exposición prolongada daña el oído</td></tr>
           <tr><td><i class="sw" style="--c:var(--danger)"></i>90</td><td>Cortacésped, moto</td></tr>
           <tr><td><i class="sw" style="--c:var(--danger)"></i>100</td><td>Discoteca, martillo neumático</td></tr>
-          <tr><td><i class="sw" style="--c:var(--danger)"></i>110</td><td>Concierto de rock</td></tr>
           <tr><td><i class="sw" style="--c:var(--danger)"></i>120</td><td>Sirena cercana, umbral de dolor</td></tr>
         </tbody>
       </table>
@@ -498,10 +607,8 @@
     <div class="help-body">
       <ul>
         <li>Un móvil no es un sonómetro homologado. Calibrado, la precisión típica es de ±2–5 dB. Por debajo de ~30 dB domina el ruido del propio micrófono y por encima de ~100–110 dB puede saturarse.</li>
-        <li>Sirve como registro orientativo (por ejemplo, para documentar molestias), pero una denuncia formal suele requerir una medición con un sonómetro certificado.</li>
-        <li>Como referencia, la OMS recomienda no superar 30 dB(A) de media en un dormitorio por la noche.</li>
         <li>Las grabaciones se guardan <b>solo en este dispositivo</b>; no se suben a ningún servidor. Si borras los datos del navegador, se borran.</li>
-        <li>Grabar conversaciones de otras personas puede estar limitado por la ley. Úsala con respeto.</li>
+        <li>Grabar conversaciones de otras personas puede estar limitado por la ley. Úsala para documentar ruido, no para escuchar conversaciones.</li>
       </ul>
     </div>
   </details>

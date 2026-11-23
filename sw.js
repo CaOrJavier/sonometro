@@ -1,5 +1,5 @@
 // Service worker: red primero (para recibir actualizaciones) y caché como respaldo sin conexión.
-const CACHE = 'sonometro-v1';
+const CACHE = 'sonometro-v2';
 const ASSETS = [
   './',
   './index.html',
@@ -35,7 +35,8 @@ self.addEventListener('fetch', (e) => {
   const url = new URL(req.url);
   if (url.origin !== self.location.origin) return;
   e.respondWith(
-    fetch(req)
+    // «no-cache»: siempre pregunta al servidor si hay versión nueva (si no la hay, usa la guardada)
+    fetch(req, { cache: 'no-cache' })
       .then((res) => {
         if (res.ok) {
           const copy = res.clone();
